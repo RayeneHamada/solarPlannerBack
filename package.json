@@ -1,0 +1,21 @@
+{
+  "name": "prototype",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.19.2",
+    "body-parser": "^1.19.0",
+    "cors": "^2.8.5",
+    "express": "^4.17.1",
+    "geolib": "^3.2.1",
+    "mongoose": "^5.9.3",
+    "nodemon": "^2.0.2",
+    "pvtools": "^1.0.93"
+  }
+}
