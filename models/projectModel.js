@@ -1,14 +1,14 @@
 // projectModel.js
 var mongoose = require('mongoose');
-
-var projectSchema = mongoose.Schema({
+var Schema = mongoose.Schema;
+var projectSchema = new Schema({
     name: {
         type: String,
         required: true
     },
     area: [{
         lat: Number,
-        long: Number
+        lon: Number
     }],
     lat: {
         type: Number,
@@ -17,6 +17,15 @@ var projectSchema = mongoose.Schema({
     lon: {
         type: Number,
         required: true
+    },
+    surface: {
+        type: Number,
+        required: true
+    },
+    panel: {
+        height:Number,
+        width:Number,
+        capacity:Number
     },
     tilt: {
         type: Number,
@@ -32,15 +41,18 @@ var projectSchema = mongoose.Schema({
     zenith: {
         type: Number,
     },
-    panels:{
+    panel_number: {
         type: Number,
         required: true
+    },
+    install_date: {
+        type:Date,
+        default: Date.now
     },
     create_date: {
         type: Date,
         default: Date.now
     }
-
 
 });
 // Export Project model
