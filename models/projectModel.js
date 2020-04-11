@@ -22,6 +22,31 @@ var projectSchema = new Schema({
         type: Number,
         required: true
     },
+    country: {
+        type: String,
+        required: true
+    },
+    timezone: {
+        type: String,
+        required: true
+    },
+    currency: {
+        type: String,
+        required: true
+    },
+    price: {
+        type: Number,
+        required: true
+    },
+
+    height: {
+        type: Number,
+        required: true,
+    },
+    width: {
+        type: Number,
+        required: true,
+    },
     panel: {
         height:Number,
         width:Number,
@@ -48,6 +73,10 @@ var projectSchema = new Schema({
     install_date: {
         type:Date,
         default: Date.now
+    },
+    owner:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"Users"
     },
     create_date: {
         type: Date,

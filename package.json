@@ -10,12 +10,30 @@
   "license": "ISC",
   "dependencies": {
     "axios": "^0.19.2",
+    "bcryptjs": "^2.4.3",
     "body-parser": "^1.19.0",
+    "cancan": "^3.1.0",
+    "canvas": "^2.6.1",
+    "cookie-parser": "^1.4.5",
     "cors": "^2.8.5",
+    "country-list": "^2.2.0",
+    "country-reverse-geocoding": "^0.2.2",
     "express": "^4.17.1",
+    "express-session": "^1.17.0",
+    "geo-tz": "^5.1.0",
     "geolib": "^3.2.1",
+    "jsonwebtoken": "^8.5.1",
+    "loadash": "^1.0.0",
+    "lodash": "^4.17.15",
+    "moment": "^2.24.0",
+    "moment-timezone": "^0.5.28",
     "mongoose": "^5.9.3",
     "nodemon": "^2.0.2",
-    "pvtools": "^1.0.93"
+    "passport": "^0.4.1",
+    "passport-local": "^1.0.0",
+    "pureimage": "^0.2.1",
+    "pvtools": "^1.0.93",
+    "suncalc": "^1.8.0",
+    "xml2js": "^0.4.23"
   }
 }
