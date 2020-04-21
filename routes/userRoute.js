@@ -7,7 +7,10 @@ const main_controller = require('../controllers/userController');
 router.post('/register', main_controller.register);
 router.post('/auth', main_controller.authenticate);
 router.get('/userprofile',jwtHelper.verifyUserJwtToken,main_controller.userProfile);
-router.get('/usersList',jwtHelper.verifyAdminJwtToken,main_controller.usersList);
+router.get('/usersList',main_controller.usersList);
+router.get('/reset/:email',main_controller.sendPasswordResetEmail);
+router.post('/reset',jwtHelper.verifyPasswordResetJwtToken,main_controller.receiveNewPassword);
+router.delete('/delete/:id',main_controller.user_delete);
 
 
 

@@ -1,5 +1,7 @@
 const mongoose  = require('mongoose'),
 Project = mongoose.model('Projects'),
+User = mongoose.model('Users'),
+
 fs = require('fs'),
 geolib = require('geolib'),
 pvtools = require("pvtools"),
@@ -11,11 +13,11 @@ moment = require('moment-timezone'),
 crg = require('country-reverse-geocoding').country_reverse_geocoding(),
 { getCode, getName } = require('country-list'),
 parseString = require('xml2js').parseString;
-
+var schedule = require('node-schedule');
 
 
 //main function
-exports.test = function (req, res) {
+exports.create = function (req, res) {
     console.log("you've called the backend");
     //Array containing the coins of the area
     var area = [];
@@ -38,15 +40,24 @@ exports.test = function (req, res) {
     //Surface area
     var surface;
     //country
-    var country;
+    var country='';
     //Internet code of the country
-    var country_code;
+    var country_code='';
     //Timezone of the area
     var timezone = '';
     //Currency of the country
-    var currency;
+    var currency='';
     //Average price of a kw of electrecity
-    var price;
+    var price='';
+    var forecastsByday = [];
+    var pv_today=[];
+    var estimationsByday = [];
+    var offset;
+
+    var sunrise;
+
+    var sunset;
+    var pv_prod = 0;
     //loop to fill area with the data from the request
     for (let i = 0; i < req.body.points.length; i++) {
         let y = Number(req.body.points[i].lat),
@@ -88,8 +99,13 @@ exports.test = function (req, res) {
     +country_code+'&prd=latest&uidc=536b5a3a56e9c22263870adb5788814d')
     .then(function (response) {
     parseString(response.data, function (err, result) {
-        let currency = result['gpp:data']['gpp:element'][0]['gpp:currency'][0] ;
-        let price = Number(result['gpp:data']['gpp:element'][0]['gpp:average'][0]) ;
+        if(result['gpp:data']['gpp:element'][0]['gpp:currency'])
+        { currency = result['gpp:data']['gpp:element'][0]['gpp:currency'][0] ;
+         price = Number(result['gpp:data']['gpp:element'][0]['gpp:average'][0]) ;}
+        else{
+             currency= 'none';
+             price = 0;
+        }
     
     
 
@@ -130,6 +146,97 @@ exports.test = function (req, res) {
             
         }
     }
+     offset = moment().tz(timezone).utcOffset();
+     sunrise = SunCalc.getTimes(new Date(), center.latitude,center.longitude,0).sunrise;
+     sunset = SunCalc.getTimes(new Date(), center.latitude,center.longitude,0).sunset;
+     sunrise = moment(new Date(sunrise)).tz(timezone).hours();
+     sunset = moment(new Date(sunset)).tz(timezone).hours();
+
+     axios.get("https://api.solcast.com.au//world_pv_power/forecasts?latitude=" + Number(center.latitude) + "&longitude=" + Number(center.longitude) + "&capacity="+Number(req.body.panelCapacity*inc)+"&hours=168&api_key=LvMhWe_LaRKDsjCl1IVM115PEKplwzei&format=json")
+     .then(function (response) {
+
+        let today = new Date();
+        let today_here = moment(today).tz(timezone).date();
+        let pv_per_day = 0;
+        let date_of_loop = moment(response.data.forecasts[0].period_end);
+        if(moment(response.data.forecasts[0].period_end).tz(timezone).date() == today_here )
+        {
+            date_of_loop = moment(new Date(response.data.forecasts[0].period_end).setDate(new Date(response.data.forecasts[0].period_end).getDate()+1)).tz(timezone).date();
+        }
+        for(let i=0;i<response.data.forecasts.length;i++)
+        {
+            if(moment(response.data.forecasts[i].period_end).tz(timezone).date() == today_here)
+            {//console.log(moment(response.data.forecasts[i].period_end).tz(timezone).date());
+                for(j=sunrise;j<=sunset;j++)
+                    if(moment(response.data.forecasts[i].period_end).tz(timezone).hours()==j)
+                    {
+                        pv_prod+=Number(response.data.forecasts[i].pv_estimate);
+                        pv_today.push({date_time:new Date(response.data.forecasts[i].period_end),pv:Number(response.data.forecasts[i].pv_estimate)});
+                                    
+                            
+                    }   
+                
+            }
+            else
+            {
+                if(moment(response.data.forecasts[i].period_end).tz(timezone).date() == date_of_loop)
+                {pv_per_day+=response.data.forecasts[i].pv_estimate;}
+                else
+                {
+                 forecastsByday.push({'date_time':new Date(response.data.forecasts[i].period_end),'pv':pv_per_day});
+                 pv_per_day = Number(response.data.forecasts[i].pv_estimate);
+                 date_of_loop = moment(response.data.forecasts[i].period_end).tz(timezone).date();
+                }
+            }
+        }
+        pv_per_day = 0;
+
+        
+
+
+
+
+         axios.get("https://api.solcast.com.au//world_pv_power/estimated_actuals?latitude=" + Number(center.latitude) + "&longitude=" + Number(center.longitude) + "&capacity="+Number(req.body.panelCapacity*inc)+"&hours=168&api_key=LvMhWe_LaRKDsjCl1IVM115PEKplwzei&format=json")
+                .then(function (response2) {
+                    
+                    if(moment(response2.data.estimated_actuals[0].period_end).tz(timezone).date() == today_here )
+                    {
+                        date_of_loop = moment(new Date(response2.data.estimated_actuals[0].period_end).setDate(new Date(response2.data.estimated_actuals[0].period_end).getDate()-1)).tz(timezone).date();
+                    }
+                    else
+                    {
+                        date_of_loop = moment(new Date(response2.data.estimated_actuals[0].period_end)).tz(timezone).date();
+                    }
+                    for(let i=0;i<response2.data.estimated_actuals.length;i++)
+                    {
+                        if(moment(response2.data.estimated_actuals[i].period_end).tz(timezone).date() == today_here)
+                        {
+                           
+                            for(j=sunrise;j<=sunset;j++)
+                            {
+                               
+                                if(moment(response2.data.estimated_actuals[i].period_end).tz(timezone).hours()==j)
+                                {
+                                           pv_today.push({date_time:new Date(response2.data.estimated_actuals[i].period_end),pv:Number(response2.data.estimated_actuals[i].pv_estimate)});
+                                            pv_prod+=Number(response2.data.estimated_actuals[i].pv_estimate);
+                                    
+                                }   
+                            }
+                        }
+                        else
+                        {
+                            if(moment(response2.data.estimated_actuals[i].period_end).tz(timezone).date() == date_of_loop)
+                            {pv_per_day+=response2.data.estimated_actuals[i].pv_estimate;}
+                            else
+                            {
+
+                                estimationsByday.push({'date_time':new Date(response2.data.estimated_actuals[i-1].period_end),'pv':pv_per_day});
+                             pv_per_day = Number(response2.data.estimated_actuals[i].pv_estimate);
+                             date_of_loop = moment(response2.data.estimated_actuals[i].period_end).tz(timezone).date();
+                            }
+                        }
+                    }         
+        
     
 
     //create the new project
@@ -146,27 +253,48 @@ exports.test = function (req, res) {
         width: width,
         height : height, 
         tilt:req.body.tilt,
+        prod_today: pv_today,
+        total_prod: pv_prod,
+        next_prod: forecastsByday,
+        previous_prod: estimationsByday,
         panel: {height:req.body.panelHeight,width:req.body.panelWidth,capacity:req.body.panelCapacity},
         direction: direction,
         panel_number: inc,
         owner: req._id
     });
-    c.save().then(() => {
 
-        res.status(200).send({'project':c});
+    c.save((err, doc) => {
+        if(err){
+            return res.status(503).send(err);
+        }
+        else
+        {
+            res.status(200).send(doc)
+            midnight = 0-2+offset/60;
 
-    }).catch((err) => {
-        res.status(400).send({
-            message: "erreur : " + err
-        })
-    });
 
-    });
-    });
+        schedule.scheduleJob('47 '+3+' * * *', function()
+        {
+            
+
+            update_production_data(c);
+        });
+        }
+    })
+
+    }).catch(function (error) {
+        console.log(error);
+      });
+    }).catch(function (error) {
+        console.log(error);
+      });
+    })
+    }).catch(function (error) {
+        console.log(error);
+      });
     }
     
 };
-
 
 exports.allProjects = function(req,res){
     
@@ -174,22 +302,21 @@ exports.allProjects = function(req,res){
         if (!err) {
             res.status(200).send(docs);
         }
-        else { console.log("error in retriving projects" + JSON.stringify(err, undefined, 2)); }
+        else { res.status(503).send(err); }
 
     })
-}
+};
 
 exports.dashboard = function(req,res){
     
     Project.find({owner: req._id},'name lat lon surface panel_number area',(err, docs) => {
         if (!err) {
-            console.log(req.role);
             res.status(200).send(docs);
         }
-        else { console.log("error in retriving dashboard" + json.stringify(err, undefined, 2)); }
+        else { res.status(503).send(err); }
 
     })
-}
+};
 
 exports.project_delete = function (req, res) {
     
@@ -198,6 +325,7 @@ exports.project_delete = function (req, res) {
         res.send('Deleted successfully!',200);
     })
 };
+
 exports.project_details = function(req,res)
 {
     Project.findById(req.params.id, function (err, p) {
@@ -215,10 +343,9 @@ exports.project_details = function(req,res)
         res.status(200).send({'project':p,'sunrise':sunrise, 'solarnoon':solarnoon,'sunset':sunset});
 
     })
-
 };
 
-exports.energy_details = function(req,res)
+exports.sun_details = function(req,res)
 {
         Project.findById(req.params.id, function (err, p) {
        // p ={'timezone':'Europe/Madrid','lat':40.33483730171493,'lon':-3.878755740935532,panel:{capacity:'1500'},panel_number:3910};
@@ -243,115 +370,13 @@ exports.energy_details = function(req,res)
                 azimuth-=180;
             var solarElevation = SunCalc.getPosition(date  ,Number(p.lat), Number(p.lon)).altitude*180/Math.PI;
             
-            sunPath.push({'hour':i,'azimuth':azimuth, 'solar_elevation': solarElevation, 'pv':0});
-        }
-        
-        axios.get("https://api.solcast.com.au//world_pv_power/forecasts?latitude=" + Number(p.lat) + "&longitude=" + Number(p.lon) + "&capacity="+Number(p.panel.capacity*p.panel_number)+"&hours=168&api_key=LvMhWe_LaRKDsjCl1IVM115PEKplwzei&format=json")
-        .then(function (response) {
-            var forecastsByday = [];
-            var day = moment(new Date(response.data.forecasts[0].period_end)).tz(timezone).date();
-            var month = new Date(response.data.forecasts[0].period_end).getMonth();
-            var hour = new Date(response.data.forecasts[0].period_end).getHours();
-            var pvPerDay = Number(response.data.forecasts[0].pv_estimate);
-            for(let i=0;i<response.data.forecasts.length;i++)
-            {
-                if(moment(new Date(response.data.forecasts[i].period_end)).tz(timezone).date() == moment(new Date()).tz(timezone).date())
-                {
-                      for(let j=0;j<sunPath.length;j++)
-                    {
-                        if(sunPath[j].hour == moment(new Date(response.data.forecasts[i].period_end)).tz(timezone).hours
-                        ())
-                        {
-                            sunPath[j].pv += Number(response.data.forecasts[i].pv_estimate);
-                        }
-                    }
-                }
-
-                if(moment(new Date(response.data.forecasts[i].period_end)).tz(timezone).date()== day)
-                {
-                    pvPerDay += Number(response.data.forecasts[i].pv_estimate);
-                }
-                else
-                {
-                    forecastsByday.push({'day':day+'/'+month,'pv':pvPerDay});
-                    var day = moment(new Date(response.data.forecasts[i].period_end)).tz(timezone).date();
-                    var month = new Date(response.data.forecasts[i].period_end).getMonth();
-                    pvPerDay = Number(response.data.forecasts[i].pv_estimate);
-                    
-
-                }
-               
-                
-
-            }
-                axios.get("https://api.solcast.com.au//world_pv_power/estimated_actuals?latitude=" + Number(p.lat) + "&longitude=" + Number(p.lon) + "&capacity="+Number(p.panel.capacity*p.panel_number)+"&hours=168&api_key=LvMhWe_LaRKDsjCl1IVM115PEKplwzei&format=json")
-                .then(function (response2) {
-                    var estimationsByday = [];
-                    var day = moment(new Date(response2.data.estimated_actuals[0].period_end)).tz(timezone).date();
-                    var month = new Date(response2.data.estimated_actuals[0].period_end).getMonth();
-                   
-                    var pvPerDay = Number(response2.data.estimated_actuals[0].pv_estimate);
-                    for(let i=0;i<response2.data.estimated_actuals.length;i++)
-                    {
-                        if(moment(new Date(response2.data.estimated_actuals[i].period_end)).tz(timezone).date() == moment(new Date()).tz(timezone).date())
-                        {   
-                            for(let j=0;j<sunPath.length;j++)
-                            {
-                                if(sunPath[j].hour == moment(new Date(response2.data.estimated_actuals[i].period_end)).tz(timezone).hours
-                                ())
-                                {
-                                    
-                                    sunPath[j].pv += Number(response2.data.estimated_actuals[i].pv_estimate);
-                                }
-                            }
-                        }
-                        if(moment(new Date(response2.data.estimated_actuals[i].period_end)).tz(timezone).date()== day)
-                        {
-                            pvPerDay += Number(response2.data.estimated_actuals[i].pv_estimate);
-                        }
-                        else
-                        {
-                            estimationsByday.push({'day':day+'/'+month,'pv':pvPerDay});
-                            day = moment(new Date(response2.data.estimated_actuals[i].period_end)).tz(timezone).date();
-                            month = new Date(response2.data.estimated_actuals[i].period_end).getMonth(); 
-                            pvPerDay = Number(response2.data.estimated_actuals[i].pv_estimate);
-
-                        }
-
-                    }
-
-                    res.send({'forecast':forecastsByday,'estimation':estimationsByday,'sun_path':sunPath});
-
-                })
-                .catch(function (error) {
-                // handle error
-                console.log(error);
-                })
-                .finally(function () {
-                // always executed
-                });
-
-        })
-        .catch(function (error) {
-        // handle error
-        console.log(error);
-        })
-        .finally(function () {
-        // always executed
-        });
-            
+            sunPath.push({'hour':i,'azimuth':azimuth, 'solar_elevation': solarElevation});
+        }  
+        res.status(200).send(sunPath);          
       });
    
               
-}
-
-
-
-
-
-
-
-
+};
 
 exports.visitor_test = function (req, res) {
     var area = [];
@@ -451,14 +476,7 @@ exports.visitor_test = function (req, res) {
     }
 }
 res.status(200).send({'numberOfPanels':inc, 'direction': direction});
-}
-
-
-
-
-
-
-
+};
 
 function getBoundingRect(data) {
     let left ;
@@ -476,11 +494,7 @@ function getBoundingRect(data) {
     
 
     return {x: left, y: top, width: right - left, height: bottom - top};
-  }
-
-
-
-
+};
 
 exports.project_plan = function (reqq, res) {
     Project.findById(reqq.params.id, function (err, p) {
@@ -586,11 +600,11 @@ exports.project_plan = function (reqq, res) {
 
 
     let boundingRect = getBoundingRect(req);
-    let scale = Math.min(2000, 2000);
-    var canvas = new Canvas(4000, 4000, 'pdf');
+    let scale = Math.min(700, 700);
+    var canvas = new Canvas(800, 800, 'pdf');
     const ctx = canvas.getContext('2d')
     ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, 7000, 7000);
+    ctx.fillRect(0, 0, 800, 800);
     ctx.strokeStyle = "black";
     ctx.fillStyle = "black";
 
@@ -634,3 +648,188 @@ exports.project_plan = function (reqq, res) {
 
 }  })
 };
+
+function update_production_data (p){
+    var timezone = p.timezone;
+    var today = new Date();
+    var forecastsByday = [];
+    var pv_today=[];
+    var estimationsByday = [];
+    var offset = moment().tz(timezone).utcOffset();
+    var sunrise = SunCalc.getTimes(today, p.lat,p.lon,0).sunrise;
+    var sunset = SunCalc.getTimes(today, p.lat,p.lon,0).sunset;
+    sunrise = moment(new Date(sunrise)).tz(timezone).hours();
+    sunset = moment(new Date(sunset)).tz(timezone).hours();
+    var yesterday = new Date().setDate(today.getDate()-1);
+
+    axios.get("https://api.solcast.com.au//world_pv_power/forecasts?latitude=" + Number(p.lat) + "&longitude=" + Number(p.lon) + "&capacity="+Number(p.panel.capacity*p.panel_number)+"&hours=168&api_key=LvMhWe_LaRKDsjCl1IVM115PEKplwzei&format=json")
+     .then(function (response) {
+        let pv_prod = p.total_prod;
+        let today = new Date();
+        let today_here = moment(today).tz(timezone).date();
+        let pv_per_day = 0;
+        let date_of_loop = moment(response.data.forecasts[0].period_end);
+        if(moment(response.data.forecasts[0].period_end).tz(timezone).date() == today_here )
+        {
+            date_of_loop = moment(new Date(response.data.forecasts[0].period_end).setDate(new Date(response.data.forecasts[0].period_end).getDate()+1)).tz(timezone).date();
+        }
+        for(let i=0;i<response.data.forecasts.length;i++)
+        {
+            if(moment(response.data.forecasts[i].period_end).tz(timezone).date() == today_here)
+            {
+                for(j=sunrise;j<=sunset;j++)
+                    if(moment(response.data.forecasts[i].period_end).tz(timezone).hours()==j)
+                    {
+                        pv_prod+=Number(response.data.forecasts[i].pv_estimate);
+                        pv_today.push({date_time:new Date(response.data.forecasts[i].period_end),pv:Number(response.data.forecasts[i].pv_estimate)});
+                                    
+                            
+                    }   
+                
+            }
+            else
+            {
+                if(moment(response.data.forecasts[i].period_end).tz(timezone).date() == date_of_loop)
+                {pv_per_day+=response.data.forecasts[i].pv_estimate;}
+                else
+                {
+                 forecastsByday.push({'date_time':new Date(response.data.forecasts[i].period_end),'pv':pv_per_day});
+                 pv_per_day = Number(response.data.forecasts[i].pv_estimate);
+                 date_of_loop = moment(response.data.forecasts[i].period_end).tz(timezone).date();
+                }
+            }
+        }
+
+        pv_per_day = 0;
+
+        
+
+
+
+
+        axios.get("https://api.solcast.com.au//world_pv_power/estimated_actuals?latitude=" + Number(p.lat) + "&longitude=" + Number(p.lon) + "&capacity="+Number(p.panel.capacity*p.panel_number)+"&hours=168&api_key=LvMhWe_LaRKDsjCl1IVM115PEKplwzei&format=json")
+               .then(function (response2) {
+                   
+                   if(moment(response2.data.estimated_actuals[0].period_end).tz(timezone).date() == today_here )
+                   {
+                       date_of_loop = moment(new Date(response2.data.estimated_actuals[0].period_end).setDate(new Date(response2.data.estimated_actuals[0].period_end).getDate()-1)).tz(timezone).date();
+                   }
+                   else
+                   {
+                       date_of_loop = moment(new Date(response2.data.estimated_actuals[0].period_end)).tz(timezone).date();
+                   }
+                   for(let i=0;i<response2.data.estimated_actuals.length;i++)
+                   {
+                       if(moment(response2.data.estimated_actuals[i].period_end).tz(timezone).date() == today_here)
+                       {
+                          
+                           for(j=sunrise;j<=sunset;j++)
+                           {
+                              
+                               if(moment(response2.data.estimated_actuals[i].period_end).tz(timezone).hours()==j)
+                               {
+                                          pv_today.push({date_time:new Date(response2.data.estimated_actuals[i].period_end),pv:Number(response2.data.estimated_actuals[i].pv_estimate)});
+                                           pv_prod+=Number(response2.data.estimated_actuals[i].pv_estimate);
+                                   
+                               }   
+                           }
+                       }
+                       else
+                       {
+                           if(moment(response2.data.estimated_actuals[i].period_end).tz(timezone).date() == date_of_loop)
+                           {pv_per_day+=response2.data.estimated_actuals[i].pv_estimate;}
+                           else
+                           {
+
+                            estimationsByday.push({'date_time':new Date(response2.data.estimated_actuals[i-1].period_end),'pv':pv_per_day});
+                            pv_per_day = Number(response2.data.estimated_actuals[i].pv_estimate);
+                            date_of_loop = moment(response2.data.estimated_actuals[i].period_end).tz(timezone).date();
+                           }
+                       }
+                   }
+                });
+            });
+    Project.findByIdAndUpdate(p.id, {$set: {prod_today: pv_today,next_prod: forecastsByday,previous_prod: estimationsByday}}, function (err, project) {
+        if(err)
+        {
+            console.log(err)
+        }
+    })
+
+};
+
+exports.admin_all_projects = function(req,res){
+    
+    Project.find({},'name lat lon surface panel_number total_prod install_date country owner.fullname')
+    .populate({path:'owner',select:'fullName'})
+    .exec((err,p)=>{
+        if(err)
+        {
+            console.log(err);
+                res.status(500).send(err);
+        }
+        else
+        {
+            res.send(p);
+        }
+
+        
+    })
+};
+
+exports.admin_project_delete = function (req, res) {
+    
+    Project.findByIdAndRemove(req.params.id, function (err) {
+        if (err) {
+            console.log(err);
+            res.status(500).send(err);
+        }
+        else{
+            res.send('Deleted successfully!',200);
+        }
+    })
+};
+
+exports.admin_dashboard = function (req,res) {
+    Project.find({},'name lat lon surface panel_number area, total_prod country owner.fullname')
+    .populate({path:'owner',select:'fullName'})
+    .exec((err,p)=>{
+        if(err)
+        {
+            console.log(err);
+            res.status(500).send(err.message);
+        }
+        else
+        {
+            User.countDocuments({'role':'user'}, function(err,c){
+                res.send({'projects':p,'users':c,'number_of_projects':p.length});
+            })
+            
+        }
+    })
+}
+
+exports.admin_all_solar_panels = function(req,res){
+    Project.aggregate([ { 
+        $group: { 
+            _id: null,
+            total_panels: { 
+                $sum: "$panel_number" 
+            },
+            total_pv: {
+                $sum: "$total_prod"
+            },
+
+
+        },
+         
+    } ],(err,p) => {
+        if(!err)
+        {
+            res.status.send(p);
+        }
+        else{
+            res.status(500).send(err);
+        }
+    } )
+}
