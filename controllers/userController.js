@@ -13,20 +13,30 @@ exports.register = function(req,res,next)
         user.fullName = req.body.fullName;
         user.email = req.body.email;
         user.password = req.body.password;
-        user.save((err, doc) => {  
-            if (!err)
-               {    
-                   
-                   res.status(200).json({ "token": doc.generateJwt() });
-                }
-            else {
-                if (err.code == 11000)
-                    res.status(422).send(['Duplicate email adrress found.']);
-                else
-                    return next(err);
-            }
-    
-        });
+        User.countDocuments({email:user.email}, function(err, c) {
+          if(c == 0)
+          {
+            user.save((err, doc) => {  
+              if (!err)
+                 {    
+                     
+                     res.status(200).json({ "token": doc.generateJwt() });
+                  }
+              else {
+                  if (err.code == 11000)
+                      res.status(422).send(['Duplicate email adrress found.']);
+                  else
+                      return next(err);
+              }
+      
+          });
+          }
+          else{
+            res.status(403).send('There is already a used using this e-mail');
+          }
+         });
+       
+        
     
 }
 
@@ -104,7 +114,8 @@ exports.user_delete = function (req, res) {
       res.status(404).json("No user with that email")
     }
     console.log(user);
-    const token = user.usePasswordHashToMakeToken();
+    if(user)
+    {const token = user.usePasswordHashToMakeToken();
     const url = mailer.getPasswordResetURL(user, token)
     const emailTemplate = mailer.resetPasswordTemplate(user, url)
   
@@ -117,6 +128,9 @@ exports.user_delete = function (req, res) {
             res.status(200).send({status:'success'})
         }
       })
+    }}
+    else{
+      res.status(400).json("No user found with this e-mail");
     }
     sendEmail()
   }
