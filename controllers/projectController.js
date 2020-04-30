@@ -15,7 +15,6 @@ crg = require('country-reverse-geocoding').country_reverse_geocoding(),
 parseString = require('xml2js').parseString;
 var schedule = require('node-schedule');
 
-
 //main function
 exports.create = function (req, res) {
     console.log("you've called the backend");
@@ -309,11 +308,27 @@ exports.allProjects = function(req,res){
 
 exports.dashboard = function(req,res){
     
-    Project.find({owner: req._id},'name lat lon surface panel_number area',(err, docs) => {
+    Project.find({owner: req._id},'name lat lon surface panel_number area prod_today next_prod previous_prod',(err, docs) => {
         if (!err) {
-            res.status(200).send(docs);
+            Project.aggregate(
+                [
+                  {$match:{"owner":mongoose.Types.ObjectId(req._id)}},
+                  {$group:
+                    {
+                      _id:"$owner",
+                      total:{$sum:'$total_prod'},
+                      
+                    }
+                  }
+                ],
+                function(err,result){
+                  res.send({'projects':docs,'total_prod':result[0].total});
+                }
+                )
         }
-        else { res.status(503).send(err); }
+        else {
+            
+            res.status(503).send(err); }
 
     })
 };
@@ -801,9 +816,24 @@ exports.admin_dashboard = function (req,res) {
         }
         else
         {
-            User.countDocuments({'role':'user'}, function(err,c){
-                res.send({'projects':p,'users':c,'number_of_projects':p.length});
-            })
+            Project.aggregate(
+                [
+                  //{$match:{"owner":mongoose.Types.ObjectId("5e9c26e7e4f6ad24d816575e")}},
+                  {$group:
+                    {
+                      _id:null,
+                      total:{$sum:'$total_prod'},
+                      
+                    }
+                  }
+                ],
+                function(err,result){
+                    User.countDocuments({'role':'user'}, function(err,c){
+                        res.send({'projects':p,'users':c,'number_of_projects':p.length,'total_prod':result[0].total});
+                    })
+                }
+                )
+          
             
         }
     })
@@ -826,7 +856,7 @@ exports.admin_all_solar_panels = function(req,res){
     } ],(err,p) => {
         if(!err)
         {
-            res.status.send(p);
+            res.status(200).send(p);
         }
         else{
             res.status(500).send(err);

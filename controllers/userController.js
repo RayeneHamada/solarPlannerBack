@@ -1,5 +1,6 @@
 const mongoose  = require('mongoose'),
 User = mongoose.model('Users'),
+axios = require('axios').default,
 Project = mongoose.model('Projects');
 const passport = require('passport');
 const _ = require('lodash');
@@ -101,10 +102,8 @@ exports.user_delete = function (req, res) {
         }
     })
 };
-
-
   
-  exports.sendPasswordResetEmail = async (req, res) => {
+exports.sendPasswordResetEmail = async (req, res) => {
     const { email } = req.params
     let user
     try {
@@ -128,15 +127,15 @@ exports.user_delete = function (req, res) {
             res.status(200).send({status:'success'})
         }
       })
-    }}
-    else{
-      res.status(400).json("No user found with this e-mail");
     }
     sendEmail()
   }
+    else{
+      res.status(400).json("No user found with this e-mail");
+    }
+  }
 
-
-  exports.receiveNewPassword = (req, res) => {
+exports.receiveNewPassword = (req, res) => {
     const password  = req.body.password;
     const id =  req.body.id;    // highlight-start
     User.findById(id)
@@ -159,5 +158,104 @@ exports.user_delete = function (req, res) {
         res.status(404).json("Invalid user")
       })
   }
+
+exports.updateFullName = (req,res) => {
+
+  User.findOne({ _id: req._id },
+    (err, user) => {
+        if (!user)
+            return res.status(404).json({ status: false, message: 'User record not found.' });
+        else
+            {
+              user.fullName = req.body.fullName;
+              User.updateOne({_id: user._id}, user).then(
+                () => {
+                  res.status(201).json({
+                    message: 'User updated successfully!'
+                  });
+                }
+              ).catch(
+                (error) => {
+                  res.status(400).json({
+                    error: error
+                  });
+                }
+              );
+            }
+    });
+}
+
+exports.updatePassword = (req,res) => {
+
+  User.findOne({ _id: req._id },
+    (err, user) => {
+        if (!user)
+            return res.status(404).json({ status: false, message: 'User record not found.' });
+        else
+            {
+              bcrypt.hash(req.body.oldPassword, user.saltSecret, function(err, hash) {
+                if (hash == user.password)
+                {
+                  
+                  bcrypt.genSalt(10, function(err, salt) {
+                    if (err) return
+                    bcrypt.hash(req.body.newPassword, salt, function(err, hash1) {
+                      // Call error-handling middleware:
+                      if (err) return
+                      user.password = hash1;
+                      user.saltSecret = salt;
+                      User.findOneAndUpdate({ _id: user._id }, user)
+                        .then(() => res.status(202).json("Password changed Successfuly"))
+                        .catch(err => res.status(500).json(err))
+                    })
+                  })
+                }
+                else
+                {
+                  res.status(400).send('wrong password')
+                }
+              });
+              
+            }
+          
+    });
+          
+}
+
+exports.admin_user_profile = function(req,res){
+  User.findOne({ _id: req.params.id },'fullName email ',(err,user)=>{
+    if(!err)
+    {
+   
+            Project.countDocuments({owner:user.id},(err,projectNumber)=>{
+                if(!err)
+                    {res.status(200).send({'user':user,'project_number':projectNumber});}
+                else{
+                  res.status(500).send(err);
+                }
+                    
+             });    
+        
+    }
+    else 
+    {
+        res.status(400).send(err);
+    }
+})
+}
+
+exports.test = function(req,res){
+
+  const config = {
+    headers: { Authorization: `Bearer `+req.body.access_token }
+};
+axios.get( 
+  'https://www.googleapis.com/oauth2/v3/userinfo',
+  config
+).then(function(response){
+  
+  console.log(response.data);
+}).catch(console.log);
+}
 
 
