@@ -48,11 +48,6 @@ var projectSchema = new Schema({
         type: Number,
         required: true,
     },
-    panel: {
-        height:Number,
-        width:Number,
-        capacity:Number
-    },
     tilt: {
         type: Number,
         required: true
@@ -67,6 +62,10 @@ var projectSchema = new Schema({
     panel_number: {
         type: Number,
         required: true
+    },
+    panel:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"Panels"
     },
     install_date: {
         type:Date,

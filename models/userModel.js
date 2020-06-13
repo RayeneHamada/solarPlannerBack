@@ -3,49 +3,71 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 var userSchema = new mongoose.Schema({
-    fullName: {
-        type: String,
-        required: 'Full name can\'t be empty'
+    method: {
+      type: String,
+      enum: ['local', 'google'],
+      required: true
     },
-    email: {
+    local: {
+      email: {
         type: String,
-        required: 'Email can\'t be empty',
-        unique: true
+        lowercase: true
+      },
+      password: { 
+        type: String
+      },
+      saltSecret: String
     },
-    password: {
+    google: {
+      email: {
         type: String,
-        required: 'Password can\'t be empty',
-        minlength: [4, 'Password must be atleast 4 character long']
+        lowercase: true
+      }
     },
-    role: {
-        type: String,
-        required: 'Role can\'t be empty',
-        default: 'user'
-    },
-    saltSecret: String
-});
+  
+      fullName: {
+          type: String,
+          required: 'Full name can\'t be empty'
+      },
+      role: {
+          type: String,
+          required: 'Role can\'t be empty',
+          default: 'user'
+      },
+      saltSecret: String
+  });
 
 // Custom validation for email
-userSchema.path('email').validate((val) => {
+userSchema.path('local.email').validate((val) => {
     emailRegex = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
     return emailRegex.test(val);
 }, 'Invalid e-mail.');
 
 // Events
 userSchema.pre('save', function (next) {
+    try {
+        console.log('entered');
+        if (this.method !== 'local') {
+          next();
+        }
     bcrypt.genSalt(10, (err, salt) => {
-        bcrypt.hash(this.password, salt, (err, hash) => {
-            this.password = hash;
-            this.saltSecret = salt;
+        bcrypt.hash(this.local.password, salt, (err, hash) => {
+            this.local.password = hash;
+            this.local.saltSecret = salt;
             next();
         });
-    });
+    });} 
+    catch(error) {
+        next(error);
+      }
+    
 });
 
 
 // Methods
 userSchema.methods.verifyPassword = function (password) {
-    return bcrypt.compareSync(password, this.password);
+    
+    return bcrypt.compareSync(password, this.local.password);
 };
 
 userSchema.methods.generateJwt = function () {
@@ -56,7 +78,7 @@ userSchema.methods.generateJwt = function () {
     });
 }
 userSchema.methods.usePasswordHashToMakeToken = function(){
-    const secret = this.password + "-" + this.create_date
+    const secret = this.local.password + "-" + this.create_date
     const token = jwt.sign({id:this._id}, process.env.JWT_SECRET, {
       expiresIn: 3600 // 1 hour
     })

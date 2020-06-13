@@ -12,9 +12,10 @@ exports.register = function(req,res,next)
 {
         var user = new User();
         user.fullName = req.body.fullName;
-        user.email = req.body.email;
-        user.password = req.body.password;
-        User.countDocuments({email:user.email}, function(err, c) {
+        user.local.email = req.body.email;
+        user.local.password = req.body.password;
+        user.method = 'local';
+        User.countDocuments({'local.email':user.local.email}, function(err, c) {
           if(c == 0)
           {
             user.save((err, doc) => {  
@@ -53,7 +54,7 @@ exports.authenticate = (req, res, next) => {
     })(req, res);
 }
 
-module.exports.userProfile = (req, res, next) =>{
+exports.userProfile = (req, res, next) =>{
     User.findOne({ _id: req._id },
         (err, user) => {
             if (!user)
@@ -63,11 +64,10 @@ module.exports.userProfile = (req, res, next) =>{
         }
     );
 }
-
-module.exports.usersList = (req, res, next) =>{
+exports.usersList = (req, res, next) =>{
 
     var users = [];
-    User.find({'role':'user'},'fullName email ',(err,user)=>{
+    User.find({'role':'user'},(err,user)=>{
         if(!err)
         {
            
@@ -91,13 +91,17 @@ module.exports.usersList = (req, res, next) =>{
 }
 
 exports.user_delete = function (req, res) {
+  console.log('ezebi');
     
-    User.findByIdAndRemove(req.params.id, function (err) {
-        if (err) return next(err);
+    User.deleteOne({'_id':req.params.id}, function (err) {
+        if (err){
+          console.log('tehshe');
+          return res.status(403).send(err);}
         else{
+          console.log('ahla');
             Project.deleteMany({'owner':req.params.id}, (err)=>{
-                if(err) return next(err);
-                return res.status(200).send('User deleted successfuly');
+                if(err) {return res.status(403).send(err);}
+                else{return res.status(200).send('User deleted successfuly');}
             })
         }
     })
@@ -107,7 +111,8 @@ exports.sendPasswordResetEmail = async (req, res) => {
     const { email } = req.params
     let user
     try {
-      user = await User.findOne({ email }).exec();
+      //msh sure khater local.email kent objet ki kent email bark
+      user = await User.findOne( 'local.email' ).exec();
       
     } catch (err) {
       res.status(404).json("No user with that email")
@@ -146,7 +151,7 @@ exports.receiveNewPassword = (req, res) => {
             bcrypt.hash(password, salt, function(err, hash) {
               // Call error-handling middleware:
               if (err) return
-              User.findOneAndUpdate({ _id: id }, { password: hash,saltSecret: salt })
+              User.findOneAndUpdate({ _id: id }, { 'local.password': hash,'local.saltSecret': salt })
                 .then(() => res.status(202).json("Password changed accepted"))
                 .catch(err => res.status(500).json(err))
             })
@@ -193,8 +198,8 @@ exports.updatePassword = (req,res) => {
             return res.status(404).json({ status: false, message: 'User record not found.' });
         else
             {
-              bcrypt.hash(req.body.oldPassword, user.saltSecret, function(err, hash) {
-                if (hash == user.password)
+              bcrypt.hash(req.body.oldPassword, user.local.saltSecret, function(err, hash) {
+                if (hash == user.local.password)
                 {
                   
                   bcrypt.genSalt(10, function(err, salt) {
@@ -202,8 +207,8 @@ exports.updatePassword = (req,res) => {
                     bcrypt.hash(req.body.newPassword, salt, function(err, hash1) {
                       // Call error-handling middleware:
                       if (err) return
-                      user.password = hash1;
-                      user.saltSecret = salt;
+                      user.local.password = hash1;
+                      user.local.saltSecret = salt;
                       User.findOneAndUpdate({ _id: user._id }, user)
                         .then(() => res.status(202).json("Password changed Successfuly"))
                         .catch(err => res.status(500).json(err))
@@ -223,7 +228,7 @@ exports.updatePassword = (req,res) => {
 }
 
 exports.admin_user_profile = function(req,res){
-  User.findOne({ _id: req.params.id },'fullName email ',(err,user)=>{
+  User.findOne({ _id: req.params.id },'fullName',(err,user)=>{
     if(!err)
     {
    
@@ -252,9 +257,30 @@ exports.test = function(req,res){
 axios.get( 
   'https://www.googleapis.com/oauth2/v3/userinfo',
   config
-).then(function(response){
-  
-  console.log(response.data);
+).then( async (response) => {
+
+
+  const existingUser = await User.findOne({ "google.email": response.data.email });
+    if (existingUser) {
+      console.log('logged in');
+      token = existingUser.generateJwt();
+      res.status(200).send({token});
+    }
+    else
+    {
+      const newUser = new User({
+      method: 'google',
+      google: {
+        email: response.data.email
+      },
+      fullName:response.data.name
+    });
+
+    await newUser.save();
+    token = newUser.generateJwt();
+    res.status(200).send({token});
+    console.log('registred');
+    }
 }).catch(console.log);
 }
 

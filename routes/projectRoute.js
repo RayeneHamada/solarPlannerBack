@@ -20,6 +20,7 @@ router.get('/plan/:id',main_controller.project_plan);
 router.delete('/admindelete/:id',main_controller.admin_project_delete);
 router.get('/admin', main_controller.admin_all_projects);
 router.get('/projects-number',main_controller.admin_all_solar_panels);
+router.post('/config',main_controller.optimalConfig);
 
 
 

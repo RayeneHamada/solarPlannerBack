@@ -1,6 +1,7 @@
 const mongoose  = require('mongoose'),
 Project = mongoose.model('Projects'),
 User = mongoose.model('Users'),
+Panel = mongoose.model('Panels'),
 
 fs = require('fs'),
 geolib = require('geolib'),
@@ -12,51 +13,48 @@ geoTz = require('geo-tz'),
 moment = require('moment-timezone'),
 crg = require('country-reverse-geocoding').country_reverse_geocoding(),
 { getCode, getName } = require('country-list'),
-parseString = require('xml2js').parseString;
-var schedule = require('node-schedule');
+parseString = require('xml2js').parseString,
+schedule = require('node-schedule');
 
 //main function
-exports.create = function (req, res) {
+exports.create = async (req, res) => {
+    console.log(req.body);
     console.log("you've called the backend");
     //Array containing the coins of the area
-    var area = [];
+    area = [],
     //Array containing the bounds of the area (maxLat,minLat,maxLon,minLon)
-    var bounds = [];
+    bounds = [];
     //height and width of the area
-    var height, width;
-    //Raw spacing
-    const rawDim = 2;
-    //Length of the panel
-    var cellDim = 1;
+    var height, width,
+    //Panel object of the panel used in this project
+    panel,
     //Array containing the 4 geopoints of the solar panel
-    var cells = new Array();
+    cells = new Array(),
     //The number of the panels
-    var inc = 0;   
+    inc = 0,  
     // center of the project area
-    var center;
+    center,
     // Direction of the solar panels;
-    var direction;
+    direction,
     //Surface area
-    var surface;
+    surface,
     //country
-    var country='';
+    country='',
     //Internet code of the country
-    var country_code='';
+    country_code='',
     //Timezone of the area
-    var timezone = '';
+    timezone = '',
     //Currency of the country
-    var currency='';
+    currency='',
     //Average price of a kw of electrecity
-    var price='';
-    var forecastsByday = [];
-    var pv_today=[];
-    var estimationsByday = [];
-    var offset;
-
-    var sunrise;
-
-    var sunset;
-    var pv_prod = 0;
+    price='',
+    forecastsByday = [],
+    pv_today=[],
+    estimationsByday = [],
+    offset,
+    sunrise,
+    sunset,
+    pv_prod = 0;
     //loop to fill area with the data from the request
     for (let i = 0; i < req.body.points.length; i++) {
         let y = Number(req.body.points[i].lat),
@@ -94,6 +92,15 @@ exports.create = function (req, res) {
     //get the timezone of the area
     timezone = geoTz(center.latitude, center.longitude)[0];
 
+    if(req.body.panelId){
+        await Panel.findById(req.body.panelId).exec().then((p)=>{panel = p});
+    }
+    else{
+        panel = new Panel({name:req.body.panel.name,height:req.body.panel.height,width:req.body.panel.width,capacity:req.body.panel.capacity,technology:req.body.panel.technology,type:'personal',owner:req._id})
+        await panel.save().then((p) =>{panel = p});
+    }
+    console.log(panel);
+
     axios.get('https://www.globalpetrolprices.com/api_gpp_el.php?uid=1787&ind=elhh&cnt='
     +country_code+'&prd=latest&uidc=536b5a3a56e9c22263870adb5788814d')
     .then(function (response) {
@@ -105,18 +112,19 @@ exports.create = function (req, res) {
              currency= 'none';
              price = 0;
         }
+  
     
     
 
     //loop on the raws
-    for(i=bounds.maxLat;i>bounds.minLat;i=geolib.computeDestinationPoint({ latitude: i, longitude: bounds.minLng }, 4, 180).latitude)
+    for(i=bounds.maxLat;i>bounds.minLat;i=geolib.computeDestinationPoint({ latitude: i, longitude: bounds.minLng }, panel.height, 180).latitude)
     {
-     for(j=bounds.minLng;j< bounds.maxLng;j = geolib.computeDestinationPoint({ latitude: i,longitude: j }, 2, 90).longitude)
+     for(j=bounds.minLng;j< bounds.maxLng;j = geolib.computeDestinationPoint({ latitude: i,longitude: j }, panel.width, 90).longitude)
 
         {
 
-            let lng1= geolib.computeDestinationPoint({ latitude: i,longitude: j }, 2, 90).longitude;
-            let lat1 = geolib.computeDestinationPoint({ latitude: i, longitude: bounds.minLng }, 4, 180).latitude;
+            let lng1= geolib.computeDestinationPoint({ latitude: i,longitude: j }, panel.width, 90).longitude;
+            let lat1 = geolib.computeDestinationPoint({ latitude: i, longitude: bounds.minLng }, panel.height, 180).latitude;
                             
 
             if (pvtools.pointInArea({ lat: i, lon: j }, area)) {
@@ -151,7 +159,7 @@ exports.create = function (req, res) {
      sunrise = moment(new Date(sunrise)).tz(timezone).hours();
      sunset = moment(new Date(sunset)).tz(timezone).hours();
 
-     axios.get("https://api.solcast.com.au//world_pv_power/forecasts?latitude=" + Number(center.latitude) + "&longitude=" + Number(center.longitude) + "&capacity="+Number(req.body.panelCapacity*inc)+"&hours=168&api_key=LvMhWe_LaRKDsjCl1IVM115PEKplwzei&format=json")
+     axios.get("https://api.solcast.com.au//world_pv_power/forecasts?latitude=" + Number(center.latitude) + "&longitude=" + Number(center.longitude) + "&capacity="+Number(panel.capacity*inc)+"&hours=168&api_key=LvMhWe_LaRKDsjCl1IVM115PEKplwzei&format=json")
      .then(function (response) {
 
         let today = new Date();
@@ -195,7 +203,7 @@ exports.create = function (req, res) {
 
 
 
-         axios.get("https://api.solcast.com.au//world_pv_power/estimated_actuals?latitude=" + Number(center.latitude) + "&longitude=" + Number(center.longitude) + "&capacity="+Number(req.body.panelCapacity*inc)+"&hours=168&api_key=LvMhWe_LaRKDsjCl1IVM115PEKplwzei&format=json")
+         axios.get("https://api.solcast.com.au//world_pv_power/estimated_actuals?latitude=" + Number(center.latitude) + "&longitude=" + Number(center.longitude) + "&capacity="+Number(panel.capacity*inc)+"&hours=168&api_key=LvMhWe_LaRKDsjCl1IVM115PEKplwzei&format=json")
                 .then(function (response2) {
                     
                     if(moment(response2.data.estimated_actuals[0].period_end).tz(timezone).date() == today_here )
@@ -256,9 +264,9 @@ exports.create = function (req, res) {
         total_prod: pv_prod,
         next_prod: forecastsByday,
         previous_prod: estimationsByday,
-        panel: {height:req.body.panelHeight,width:req.body.panelWidth,capacity:req.body.panelCapacity},
         direction: direction,
         panel_number: inc,
+        panel: panel._id,
         owner: req._id
     });
 
@@ -295,6 +303,152 @@ exports.create = function (req, res) {
     
 };
 
+exports.optimalConfig = async(req,res) => {
+    console.log(req.body);
+    console.log("you've called the backend");
+    //Array containing the coins of the area
+    area = [],
+    //Array containing the bounds of the area (maxLat,minLat,maxLon,minLon)
+    bounds = [];
+    //height and width of the area
+    var height, width,
+    //Panel object of the panel used in this project
+    panel,
+    //Array containing the 4 geopoints of the solar panel
+    cells = new Array(),
+    //The number of the panels
+    inc = 0,  
+    // center of the project area
+    center,
+    // Direction of the solar panels;
+    direction,
+    //Surface area
+    surface,
+    //country
+    country='',
+    //Internet code of the country
+    country_code='',
+    //Timezone of the area
+    timezone = '',
+    //Currency of the country
+    currency='',
+    //Average price of a kw of electrecity
+    price='',
+    forecastsByday = [],
+    pv_today=[],
+    estimationsByday = [],
+    offset,
+    sunrise,
+    sunset,
+    pv_prod = 0;
+    //loop to fill area with the data from the request
+    for (let i = 0; i < req.body.points.length; i++) {
+        let y = Number(req.body.points[i].lat),
+            x = Number(req.body.points[i].lon);
+        area.push({ latitude: y, longitude: x });
+    }
+    //calculate the center of the area
+    center = geolib.getCenter(area);
+    //calculate the surface of the area
+    surface = geolib.getAreaOfPolygon(area);
+    //find the direction of the solar panels
+    if(center.latitude>0)
+        {direction = "South";}
+    else
+        {direction = "north";}
+        lat = Math.abs(center.latitude);
+        console.log(lat);
+    if(lat<25)
+    {
+        console.log('loula');
+        tilt = lat*0.87;
+    }
+    if(lat>=25 && lat<=50)
+    {
+        console.log('thenya');
+        tilt = (lat*0.76)+3.1;
+    }
+    if(lat>50)
+    {
+        console.log('theltha');
+        tilt = lat-10;
+    }
+
+    
+    //condition to verify if there are more than 2 points so we get a polygon area
+    if(area[2]!=null)
+    {
+    //calculate the bounds of this area
+    bounds = pvtools.getBounds(area);
+    //calculate the height of the area    
+    height = pvtools.getDistance(
+        { lat: bounds.minLat, lon: bounds.maxLng },
+        { lat: bounds.maxLat, lon: bounds.maxLng }
+    );
+    //calculate the width of the area
+    width = pvtools.getDistance(
+        { lat: bounds.minLat, lon: bounds.maxLng },
+        { lat: bounds.minLat, lon: bounds.minLng }
+    );
+    //get the country where the area is located
+    country = crg.get_country(center.latitude, center.longitude).name;
+    //get the country internet code
+    country_code = getCode(country);
+    //get the timezone of the area
+    timezone = geoTz(center.latitude, center.longitude)[0];
+
+    if(req.body.panelId){
+        await Panel.findById(req.body.panelId).exec().then((p)=>{panel = p});
+    }
+    else{
+        panel = new Panel({name:req.body.panel.name,height:req.body.panel.height,width:req.body.panel.width,capacity:req.body.panel.capacity,technology:req.body.panel.technology,type:'personal',owner:req._id})
+        await panel.save().then((p) =>{panel = p});
+    }
+    console.log(panel);
+
+    
+
+    //loop on the raws
+    for(i=bounds.maxLat;i>bounds.minLat;i=geolib.computeDestinationPoint({ latitude: i, longitude: bounds.minLng }, panel.height, 180).latitude)
+    {
+     for(j=bounds.minLng;j< bounds.maxLng;j = geolib.computeDestinationPoint({ latitude: i,longitude: j }, panel.width, 90).longitude)
+
+        {
+
+            let lng1= geolib.computeDestinationPoint({ latitude: i,longitude: j }, panel.width, 90).longitude;
+            let lat1 = geolib.computeDestinationPoint({ latitude: i, longitude: bounds.minLng }, panel.height, 180).latitude;
+                            
+
+            if (pvtools.pointInArea({ lat: i, lon: j }, area)) {
+                if (pvtools.pointInArea({ lat: i, lon: lng1 }, area)) {
+                    if (pvtools.pointInArea({ lat: lat1, lon: lng1 }, area)) {
+
+                        if (pvtools.pointInArea({ lat: lat1, lon: lng1 }, area)) {
+                            
+                            let cell = new Array();
+                            cell.push(
+                                geolib.getCenterOfBounds([
+                                { latitude: i, longitude: j },
+                                { latitude: i, longitude: lng1 },
+                                { latitude: lat1, longitude: lng1 },
+                                { latitude:lat1, longitude: j },
+                            ]));
+
+                            cells.push(cell);
+                            inc++;
+                            
+                        }
+                    }
+                }
+                
+            }
+            
+        }
+    }
+}
+res.status(200).send({'panel_number':inc,'direction':direction,'tilt':tilt});
+}
+
 exports.allProjects = function(req,res){
     
     Project.find({owner: req._id},'name lat lon surface direction azimuth zenith panel_number install_date',(err, docs) => {
@@ -322,7 +476,9 @@ exports.dashboard = function(req,res){
                   }
                 ],
                 function(err,result){
-                  res.send({'projects':docs,'total_prod':result[0].total});
+                    if(result[0])
+                  {res.send({'projects':docs,'total_prod':result[0].total});}
+                  else{res.send({'projects':docs,'total_prod':'0'});}
                 }
                 )
         }
@@ -343,20 +499,24 @@ exports.project_delete = function (req, res) {
 
 exports.project_details = function(req,res)
 {
-    Project.findById(req.params.id, function (err, p) {
-        if (err) return next(err);
-        var timezone = p.timezone;
-        var sunrise = SunCalc.getTimes(new Date(), p.lat,p.lon,0).sunrise;
-        sunrise = moment(new Date(sunrise)).tz(timezone);
-        sunrise = sunrise.hours()+':'+sunrise.minutes();
-        var sunset = SunCalc.getTimes(new Date(), p.lat,p.lon,0).sunset;
-        sunset = moment(new Date(sunset)).tz(timezone);
-        sunset = sunset.hours()+':'+sunset.minutes();
-        var solarnoon = SunCalc.getTimes(new Date(), p.lat,p.lon,0).solarNoon;
-        solarnoon = moment(new Date(solarnoon)).tz(timezone);
-        solarnoon = solarnoon.hours()+':'+solarnoon.minutes();
-        res.status(200).send({'project':p,'sunrise':sunrise, 'solarnoon':solarnoon,'sunset':sunset});
-
+    Project.findById(req.params.id)
+    .populate('panel')
+    .exec(function (err, p) {
+        if (err) return res.status(500).send(err);
+        else
+        {
+            console.log(p);
+            var sunrise = SunCalc.getTimes(new Date(), p.lat,p.lon,0).sunrise;
+            sunrise = moment(new Date(sunrise)).tz(p.timezone);
+            sunrise = sunrise.hours()+':'+sunrise.minutes();
+            var sunset = SunCalc.getTimes(new Date(), p.lat,p.lon,0).sunset;
+            sunset = moment(new Date(sunset)).tz(p.timezone);
+            sunset = sunset.hours()+':'+sunset.minutes();
+            var solarnoon = SunCalc.getTimes(new Date(), p.lat,p.lon,0).solarNoon;
+            solarnoon = moment(new Date(solarnoon)).tz(p.timezone);
+            solarnoon = solarnoon.hours()+':'+solarnoon.minutes();
+            res.status(200).send({'project':p,'sunrise':sunrise, 'solarnoon':solarnoon,'sunset':sunset});
+        }
     })
 };
 
@@ -775,20 +935,18 @@ function update_production_data (p){
 
 exports.admin_all_projects = function(req,res){
     
-    Project.find({},'name lat lon surface panel_number total_prod install_date country owner.fullname')
-    .populate({path:'owner',select:'fullName'})
+    Project.find({},'name lat lon surface panel_number total_prod install_date country owner.fullName')
+    .populate('owner','fullName')
     .exec((err,p)=>{
         if(err)
         {
             console.log(err);
-                res.status(500).send(err);
+            res.status(500).send(err);
         }
         else
         {
             res.send(p);
         }
-
-        
     })
 };
 
@@ -816,6 +974,7 @@ exports.admin_dashboard = function (req,res) {
         }
         else
         {
+            console.log(p);
             Project.aggregate(
                 [
                   //{$match:{"owner":mongoose.Types.ObjectId("5e9c26e7e4f6ad24d816575e")}},
@@ -828,8 +987,16 @@ exports.admin_dashboard = function (req,res) {
                   }
                 ],
                 function(err,result){
+                    console.log(result);
                     User.countDocuments({'role':'user'}, function(err,c){
-                        res.send({'projects':p,'users':c,'number_of_projects':p.length,'total_prod':result[0].total});
+                        if(result[0])
+                        {
+                            res.send({'projects':p,'users':c,'number_of_projects':p.length,'total_prod':result[0].total});
+                        }
+                        else{
+                            res.send({'projects':p,'users':c,'number_of_projects':p.length,'total_prod':0});
+
+                        }                    
                     })
                 }
                 )
@@ -849,8 +1016,6 @@ exports.admin_all_solar_panels = function(req,res){
             total_pv: {
                 $sum: "$total_prod"
             },
-
-
         },
          
     } ],(err,p) => {
