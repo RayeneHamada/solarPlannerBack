@@ -2,6 +2,7 @@ const mongoose  = require('mongoose'),
 User = mongoose.model('Users'),
 axios = require('axios').default,
 Project = mongoose.model('Projects');
+Panel = mongoose.model('Panels');
 const passport = require('passport');
 const _ = require('lodash');
 const bcrypt = require('bcryptjs');
@@ -10,6 +11,7 @@ const mailer = require('../config/email')
 
 exports.register = function(req,res,next)
 {
+  console.log('ahla');
         var user = new User();
         user.fullName = req.body.fullName;
         user.local.email = req.body.email;
@@ -90,18 +92,20 @@ exports.usersList = (req, res, next) =>{
     })
 }
 
-exports.user_delete = function (req, res) {
-  console.log('ezebi');
-    
+exports.user_delete = function (req, res) {    
     User.deleteOne({'_id':req.params.id}, function (err) {
         if (err){
           console.log('tehshe');
           return res.status(403).send(err);}
         else{
-          console.log('ahla');
             Project.deleteMany({'owner':req.params.id}, (err)=>{
                 if(err) {return res.status(403).send(err);}
-                else{return res.status(200).send('User deleted successfuly');}
+                else{
+                  Panel.deleteMany({'owner':req.params.id}, (err)=>{
+                    if(err) {return res.status(403).send(err);}
+                    else{return res.status(200).send('User deleted successfuly');}
+                })
+}
             })
         }
     })
@@ -191,7 +195,6 @@ exports.updateFullName = (req,res) => {
 }
 
 exports.updatePassword = (req,res) => {
-
   User.findOne({ _id: req._id },
     (err, user) => {
         if (!user)
@@ -210,7 +213,7 @@ exports.updatePassword = (req,res) => {
                       user.local.password = hash1;
                       user.local.saltSecret = salt;
                       User.findOneAndUpdate({ _id: user._id }, user)
-                        .then(() => res.status(202).json("Password changed Successfuly"))
+                        .then(() => res.status(200).json("Password changed Successfuly"))
                         .catch(err => res.status(500).json(err))
                     })
                   })

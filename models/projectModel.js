@@ -39,15 +39,6 @@ var projectSchema = new Schema({
         type: Number,
         required: true
     },
-
-    height: {
-        type: Number,
-        required: true,
-    },
-    width: {
-        type: Number,
-        required: true,
-    },
     tilt: {
         type: Number,
         required: true
@@ -57,6 +48,9 @@ var projectSchema = new Schema({
         required: true
     },
     azimuth: {
+        type: Number,
+    },
+    rawSpacing: {
         type: Number,
     },
     panel_number: {

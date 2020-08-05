@@ -1,10 +1,10 @@
+require('dotenv').config()
 require('./models/userModel');
 require('./models/projectModel');
 require('./models/panelModel');
 
 require('./config/dbConfig');
 require('./config/passportConfig');
-require('./config/config');
 
 
 
@@ -27,10 +27,8 @@ app.use(bodyParser.json())
 app.use('/project', projectRoute);
 app.use('/user', userRoute);
 app.use('/panel', panelRoute);
+app.get('/test',function(req,res){res.send('bien');})
+app.use('/test',express.Router().get('/test',function(req,res){res.send('bien');}));
 
 
-
-let port = process.env.PORT || 1235;
-app.listen(port, function (req, res) {
-    console.log("it works");
-})
+module.exports = app;

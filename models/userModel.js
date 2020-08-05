@@ -46,7 +46,6 @@ userSchema.path('local.email').validate((val) => {
 // Events
 userSchema.pre('save', function (next) {
     try {
-        console.log('entered');
         if (this.method !== 'local') {
           next();
         }

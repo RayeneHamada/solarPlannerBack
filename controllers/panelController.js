@@ -21,7 +21,7 @@ exports.newPanel = function(req,res,next)
             return res.status(500).send(err);
         }
         else{
-            return res.status(200).send(doc.name+' is a panel now');
+            return res.status(200).send(doc);
         }
     })
 }
@@ -61,4 +61,4 @@ exports.myPanels = function(req,res){
             return res.status(500).send(err)
         }
     })
-}
+} 
