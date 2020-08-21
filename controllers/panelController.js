@@ -3,6 +3,7 @@ Panel = mongoose.model('Panels');
 
 exports.newPanel = function(req,res,next)
 {
+    console.log('temshy');
     panel = new Panel();
     panel.name = req.body.name;
     panel.capacity = req.body.capacity;

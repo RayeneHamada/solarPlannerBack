@@ -66,8 +66,8 @@ exports.create = async (req, res) => {
     if(req.body.panelId){
         await Panel.findById(req.body.panelId).exec().then((p)=>{panel = p});
     }
-    axios.get('https://www.globalpetrolprices.com/api_gpp_el.php?uid=2004&ind=elhh&cnt='
-    +country_code+'&prd=latest&uidc=cd7a324cda97d4f36f27011c8379dbda')
+    axios.get('https://www.globalpetrolprices.com/api_gpp_el.php?uid=2070&ind=elhh&cnt='
+    +country_code+'&prd=latest&uidc=c5f4e32c848cf03b3219ec7078b586ed')
     .then(function (response) {
     parseString(response.data, function (err, result) {
         if(result['gpp:data']['gpp:element'][0]['gpp:currency'])
@@ -533,6 +533,7 @@ function getBoundingRect(data) {
 };
 
 exports.project_plan = function (reqq, res) {
+    console.log('ahala');
     Project.findById(reqq.params.id).populate('panel').exec((err, p) =>{
         if (err) {return next(err);}
         let req = {'body':{'points':p.area}}
@@ -582,7 +583,7 @@ exports.project_plan = function (reqq, res) {
                                 { latitude: lat1, longitude: lng1 },
                                 { latitude:lat1, longitude: j },
                             ]));
-
+                            console.log('ahla');
                             cells.push(cell);                          
                         }   
                     }
@@ -590,6 +591,7 @@ exports.project_plan = function (reqq, res) {
             }
         } 
     }
+    console.log(cells.length);
 
     let boundingRect = getBoundingRect(req);
     let scale = Math.min(700, 700);
