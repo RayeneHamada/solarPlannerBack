@@ -56,8 +56,11 @@ exports.create = async (req, res) => {
     //condition to verify if there are more than 2 points so we get a polygon area
     if(area[2]!=null)
     {
+        console.log(crg.get_country(center.latitude, center.longitude))
+        console.log(center)
     //get the country where the area is located
-    country = crg.get_country(center.latitude, center.longitude).name;
+    country = "Tunisia"
+    //country = crg.get_country(center.latitude, center.longitude)
     //get the country internet code
     country_code = getCode(country);
     //get the timezone of the area
@@ -66,8 +69,8 @@ exports.create = async (req, res) => {
     if(req.body.panelId){
         await Panel.findById(req.body.panelId).exec().then((p)=>{panel = p});
     }
-    axios.get('https://www.globalpetrolprices.com/api_gpp_el.php?uid=2070&ind=elhh&cnt='
-    +country_code+'&prd=latest&uidc=c5f4e32c848cf03b3219ec7078b586ed')
+    axios.get('https://www.globalpetrolprices.com/api_gpp_el.php?uid=2701&ind=elhh,elin,elexu,elexe&cnt='
+    +country_code+'&prd=latest&uidc=83fc987eb3c3de3f4900a56af05860d7')
     .then(function (response) {
     parseString(response.data, function (err, result) {
         if(result['gpp:data']['gpp:element'][0]['gpp:currency'])
@@ -82,9 +85,8 @@ exports.create = async (req, res) => {
     sunset = SunCalc.getTimes(new Date(), center.latitude,center.longitude,0).sunset;
     sunrise = moment(new Date(sunrise)).tz(timezone).hours();
     sunset = moment(new Date(sunset)).tz(timezone).hours();
-    axios.get("https://api.solcast.com.au//world_pv_power/forecasts?latitude=" + Number(center.latitude) + "&longitude=" + Number(center.longitude) + "&capacity="+Number(panel.capacity*req.body.panelNumber)+"&hours=168&api_key=6OxRaAVQFrzoHSQPLdq85RJpVxCHS6Ll&format=json")
+    axios.get("https://api.solcast.com.au//world_pv_power/forecasts?latitude=" + Number(center.latitude) + "&longitude=" + Number(center.longitude) + "&capacity="+Number(panel.capacity*req.body.panelNumber)+"&hours=168&api_key=j88bZmpSZ6Hl9wivrMFBLxZqXcLR9Xv4&format=json")
      .then(function (response) {
-        console.log('fbeam');
         let today = new Date();
         let today_here = moment(today).tz(timezone).date();
         let pv_per_day = 0;
@@ -188,7 +190,6 @@ exports.create = async (req, res) => {
         }
         else
         {
-            console.log('mshet lhouni')
             res.status(200).send(doc)
             midnight = 0-1+offset/60;
             console.log(midnight);
@@ -533,7 +534,6 @@ function getBoundingRect(data) {
 };
 
 exports.project_plan = function (reqq, res) {
-    console.log('ahala');
     Project.findById(reqq.params.id).populate('panel').exec((err, p) =>{
         if (err) {return next(err);}
         let req = {'body':{'points':p.area}}
@@ -583,7 +583,6 @@ exports.project_plan = function (reqq, res) {
                                 { latitude: lat1, longitude: lng1 },
                                 { latitude:lat1, longitude: j },
                             ]));
-                            console.log('ahla');
                             cells.push(cell);                          
                         }   
                     }
@@ -591,7 +590,6 @@ exports.project_plan = function (reqq, res) {
             }
         } 
     }
-    console.log(cells.length);
 
     let boundingRect = getBoundingRect(req);
     let scale = Math.min(700, 700);
